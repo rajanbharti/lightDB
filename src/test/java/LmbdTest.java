@@ -1,6 +1,12 @@
+
+import tuplejump.lmdb.LMDB;
+
 import static org.junit.Assert.*;
 
+import com.typesafe.config.Config;
+import com.typesafe.config.ConfigFactory;
 import org.json.simple.JSONObject;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -10,7 +16,14 @@ import java.io.UnsupportedEncodingException;
 public class LmbdTest {
 
 
-    LMDB lmdbReadWrite = new LMDB("/home/rajan/db");
+    LMDB lmdbReadWrite;
+
+    @Before
+    public void setup() {
+        Config conf = ConfigFactory.load();
+        String dbPath = conf.getString("dbPath");
+        lmdbReadWrite = new LMDB(dbPath);
+    }
 
 
     @Test

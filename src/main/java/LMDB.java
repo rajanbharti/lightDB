@@ -1,4 +1,4 @@
-
+package tuplejump.lmdb;
 
 import com.sun.prism.shader.Solid_TextureYV12_AlphaTest_Loader;
 import org.fusesource.lmdbjni.*;
@@ -13,7 +13,7 @@ import static org.fusesource.lmdbjni.Constants.*;
 public class LMDB {
     String dbPath;
 
-    LMDB(String dbPath) {
+    public LMDB(String dbPath) {
         this.dbPath = dbPath;
     }
 
