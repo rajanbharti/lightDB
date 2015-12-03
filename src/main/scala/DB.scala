@@ -2,7 +2,7 @@ package tuplejump.lmdb
 
 import java.io._
 import java.nio.file.{Path, Files}
-import collection.mutable.Map
+
 import DataTypes._
 
 
@@ -11,8 +11,10 @@ class DB(dbPath: String) {
   val PARTITION_KEY = "pKey"
   val CLUSTERING_KEY = "cKey"
 
-  def create(tableName: String, columns: Map[String, DataTypes], partitionKey: String, clusteringKey: String): Unit = {
-    var lmdbManager = new LMDB(dbPath + "/" + tableName)
+  def create(tableName: String, columns: Map[String, String], partitionKey: String, clusteringKey: String): Unit = {
+    val tablePath = dbPath + "/" + tableName
+    new File(tablePath).mkdir
+    val lmdbManager = new LMDB(tablePath)
     columns.foreach(keyVal => lmdbManager.write(keyVal._1, keyVal._2.toString))
     lmdbManager.write(PARTITION_KEY, partitionKey)
     lmdbManager.write(CLUSTERING_KEY, clusteringKey)
@@ -20,13 +22,13 @@ class DB(dbPath: String) {
 
   def insert(tableName: String, data: Map[String, Any]) = {
     val tablePath = dbPath + "/" + tableName
-    var lmdbManager = new LMDB(tablePath)
+    val lmdbManager = new LMDB(tablePath)
     val partitionKey = lmdbManager.read(PARTITION_KEY)
     val clusteringKey = lmdbManager.read(CLUSTERING_KEY)
 
     val byteOutStream: ByteArrayOutputStream = new ByteArrayOutputStream()
     val out: DataOutputStream = new DataOutputStream(byteOutStream)
-    val pKeyPath = tablePath + "/" + data.get(partitionKey.asInstanceOf[String])
+    val pKeyPath = tablePath + "/" + data.get(partitionKey)
 
     data.foreach(keyVal => {
       if (keyVal._1 != partitionKey || keyVal._1 != clusteringKey) {
@@ -51,41 +53,46 @@ class DB(dbPath: String) {
     else {
       new File(pKeyPath).mkdir
     }
+    out.close()
     lmdbManager.dbPath = pKeyPath
     lmdbManager.byteWrite(data.get(clusteringKey).toString, byteRecord)
   }
 
 
   def getData(tableName: String, columns: List[String],
-              partitionKey: String, clusteringKey: String): Map[String, Either[String, Int]] = {
+              partitionKeyData: Any, clusteringKeyData: Any): Map[String, Either[String, Int]] = {
     val tablePath = dbPath + "/" + tableName
-    var lmdbManager = new LMDB(tablePath)
+    val lmdbManager = new LMDB(tablePath)
     val partitionKey = lmdbManager.read(PARTITION_KEY)
 
-    lmdbManager.dbPath = tablePath + "/" + partitionKey
-    val dataBytes = lmdbManager.byteRead(clusteringKey)
+    lmdbManager.dbPath = tablePath + "/Some(" + partitionKeyData.toString + ")"
+    val dataBytes = lmdbManager.byteRead(clusteringKeyData.toString)
     var data = scala.collection.mutable.Map[String, Either[String, Int]]()
     val byteInStream: ByteArrayInputStream = new ByteArrayInputStream(dataBytes)
     val in: DataInputStream = new DataInputStream(byteInStream)
     lmdbManager.dbPath = tablePath
-    while (in.available() != 0) {
-      val columnSize = in.readInt()
-      var colByteValue: Array[Byte] = new Array[Byte](columnSize)
-      in.read(colByteValue, 0, columnSize)
-      val columnName = colByteValue.asInstanceOf[String]
-      if (lmdbManager.read(columnName) == DataTypes.INT.toString) {
-        val columnData = in.readInt()
-        data += (columnName -> Right(columnData))
+    try {
+      while (in.available() != 0) {
+        val columnSize = in.readInt()
+        var colByteValue: Array[Byte] = new Array[Byte](columnSize)
+        in.read(colByteValue, 0, columnSize)
+        val columnName = new String(colByteValue)
+        if (lmdbManager.read(columnName) == DataTypes.INT.toString) {
+          val columnData = in.readInt()
+          data += (columnName -> Right(columnData))
+        }
+        else {
+          val dataSize = in.readInt()
+          var dataBytesValue: Array[Byte] = new Array[Byte](dataSize)
+          in.read(dataBytesValue, 0, dataSize)
+          val columnData = new String(dataBytesValue)
+          data += (columnName -> Left(columnData))
+        }
       }
-      else {
-        val dataSize = in.readInt()
-        var dataBytesValue: Array[Byte] = new Array[Byte](dataSize)
-        in.read(dataBytesValue, 0, dataSize)
-        val columnData = dataBytesValue.asInstanceOf[String]
-        data += (columnName -> Left(columnData))
-      }
+    } catch {
+      case e: EOFException => in.close()
     }
-    return data
+    data.toMap
   }
 
 }
