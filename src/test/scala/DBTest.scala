@@ -1,8 +1,8 @@
 
-import java.io.File
+import java.io._
 
 import com.typesafe.config.{ConfigFactory, Config}
-import org.junit.Before
+
 import org.scalatest._
 import org.scalatest.BeforeAndAfter
 import tuplejump.lmdb._
@@ -25,12 +25,12 @@ class DBTest extends FunSuite with BeforeAndAfter {
   test("write data") {
     val data = Map("sensorId" -> 1, "temperature" -> 23,
       "timestamp" -> 123, "description" -> "out temperature")
-    val data2 = Map("sensorId" -> 1, "temperature" -> 23,
-      "timestamp" -> 125, "description" -> "out temperature")
-    val data3 = Map("sensorId" -> 2, "temperature" -> 23,
-      "timestamp" -> 124, "description" -> "inside temperature")
-    val data4 = Map("sensorId" -> 3, "temperature" -> 24,
-      "timestamp" -> 122, "description" -> "out temperature2")
+     val data2 = Map("sensorId" -> 1, "temperature" -> 23,
+       "timestamp" -> 125, "description" -> "out temperature")
+     val data3 = Map("sensorId" -> 2, "temperature" -> 23,
+       "timestamp" -> 124, "description" -> "inside temperature")
+     val data4 = Map("sensorId" -> 3, "temperature" -> 24,
+       "timestamp" -> 122, "description" -> "out temperature2")
     val tablePath = dbPath + "/" + "sensor_data"
     val db = new DB(dbPath)
     db.insert("sensor_data", data)
@@ -48,9 +48,11 @@ class DBTest extends FunSuite with BeforeAndAfter {
     val db = new DB(dbPath)
     val columns = List("temperature", "description")
     val readData = db.getData("sensor_data", columns, 1, 123)
-    assert(readData.get("temperature") == 23)
+    assert(readData.get("temperature") == Some(Right(23)))
+    assert(readData.get("description")==Some(Left("out temperature")))
 
   }
+
 
 }
 
