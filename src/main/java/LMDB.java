@@ -4,6 +4,7 @@ import com.sun.prism.shader.Solid_TextureYV12_AlphaTest_Loader;
 import org.fusesource.lmdbjni.*;
 
 import java.io.*;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -117,7 +118,7 @@ public class LMDB {
         // read utf-8 string from position until NULL byte
         cursor.keyUtf8(0);
         value = cursor.valBytes();
-
+        cursor.close();
         db.close();
         env.close();
         return value;
@@ -183,7 +184,7 @@ public class LMDB {
         // read utf-8 string from position until NULL byte
         cursor.keyUtf8(0);
         value = cursor.valInt(0);
-
+        cursor.close();
         db.close();
         env.close();
 
@@ -201,8 +202,7 @@ public class LMDB {
         while (cursor.next()) {
             // read a position in buffer
             cursor.keyByte(0);
-            // cursor.valByte(0);
-            // System.out.println(cursor.valUtf8(0).getString().toString());
+            cursor.valByte(0);
             count++;
         }
         cursor.close();
@@ -212,7 +212,60 @@ public class LMDB {
         return count;
     }
 
- /*   public void forwardTraverse() {
+    public ArrayList<byte[]> readNValues(int valuesCount) {
+        Env env = new Env(dbPath);
+        Database db = env.openDatabase();
+        Transaction tx = env.createWriteTransaction();
+        BufferCursor cursor = db.bufferCursor(tx);
+        ArrayList<byte[]> records = new ArrayList<byte[]>(valuesCount);
+
+        cursor.first();
+        int i = 0;
+        while (cursor.next() && i < valuesCount) {
+            // read a position in buffer
+            cursor.keyByte(0);
+            cursor.keyUtf8(0);
+            byte[] record;
+            record = cursor.valBytes();
+            records.add(record);
+            i++;
+        }
+        cursor.close();
+        db.close();
+        env.close();
+        return records;
+
+    }
+
+    public ArrayList<byte[]> readAllValues() {
+        Env env = new Env(dbPath);
+        Database db = env.openDatabase();
+        Transaction tx = env.createWriteTransaction();
+        BufferCursor cursor = db.bufferCursor(tx);
+        ArrayList<byte[]> records = new ArrayList<byte[]>(keyCount()+1);
+        cursor.first();
+        int i = 0;
+        cursor.keyUtf8(0);
+        byte[] record;
+        record = cursor.valBytes();
+        records.add(record);
+
+        while (cursor.next() && i <= keyCount()) {
+            // read a position in buffer
+            //  cursor.keyByte(0);
+            cursor.keyUtf8(0);
+
+            record = cursor.valBytes();
+            records.add(record);
+            i++;
+        }
+        cursor.close();
+        db.close();
+        env.close();
+        return records;
+    }
+
+   public void forwardTraverse() {
         Env env = new Env(dbPath);
         Database db = env.openDatabase();
         Transaction tx = env.createWriteTransaction();
@@ -229,7 +282,7 @@ public class LMDB {
         env.close();
 
     }
-
+/*
     public Object[] reverseTraverse{
         Env env = new Env(dbPath);
         Database db = env.openDatabase();
@@ -258,7 +311,7 @@ public class LMDB {
         cursor.seek(bytes(key));
         // delete cursor position
         cursor.delete();
-
+        cursor.close();
         db.close();
         env.close();
     }
