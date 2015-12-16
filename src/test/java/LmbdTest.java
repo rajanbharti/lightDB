@@ -9,12 +9,11 @@ import org.json.simple.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
+import java.util.ArrayList;
 
 
 public class LmbdTest {
-
 
     LMDB lmdbReadWrite;
 
@@ -24,7 +23,6 @@ public class LmbdTest {
         String dbPath = conf.getString("dbPath");
         lmdbReadWrite = new LMDB(dbPath);
     }
-
 
     @Test
     public void readTest1() {
@@ -83,5 +81,5 @@ public class LmbdTest {
         }
     }
 
-
+    
 }
