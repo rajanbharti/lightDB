@@ -209,7 +209,7 @@ public class LMDB {
         db.close();
         env.close();
 
-        return count;
+        return count+1;
     }
 
     public ArrayList<byte[]> readNValues(int valuesCount) {
@@ -242,7 +242,7 @@ public class LMDB {
         Database db = env.openDatabase();
         Transaction tx = env.createWriteTransaction();
         BufferCursor cursor = db.bufferCursor(tx);
-        ArrayList<byte[]> records = new ArrayList<byte[]>(keyCount()+1);
+        ArrayList<byte[]> records = new ArrayList<byte[]>(keyCount() + 1);
         cursor.first();
         int i = 0;
         cursor.keyUtf8(0);
@@ -265,7 +265,7 @@ public class LMDB {
         return records;
     }
 
-   public void forwardTraverse() {
+    public void forwardTraverse() {
         Env env = new Env(dbPath);
         Database db = env.openDatabase();
         Transaction tx = env.createWriteTransaction();

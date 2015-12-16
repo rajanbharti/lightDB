@@ -25,10 +25,10 @@ class DB(dbPath: String) extends LazyLogging {
   def insert(tableName: String, data: Map[String, Any]) = {
     val tablePath = dbPath + "/" + tableName
     val lmdb = new LMDB(tablePath)
-    val pARTITION_KEY = lmdb.read(PARTITION_KEY)
-    val cLUSTERING_KEY = lmdb.read(CLUSTERING_KEY)
+    val partitionKey = lmdb.read(PARTITION_KEY)
+    val clusteringKey = lmdb.read(CLUSTERING_KEY)
 
-    val pKeyPath = tablePath + "/" + data.get(pARTITION_KEY)
+    val pKeyPath = tablePath + "/" + data.get(partitionKey)
     if (new File(pKeyPath).exists()) {}
     else {
       new File(pKeyPath).mkdir()
@@ -38,7 +38,7 @@ class DB(dbPath: String) extends LazyLogging {
     val out: DataOutputStream = new DataOutputStream(byteOutStream)
     data.foreach(
       keyVal => {
-        if (keyVal._1 != pARTITION_KEY && keyVal._1 != cLUSTERING_KEY) {
+        if (keyVal._1 != partitionKey && keyVal._1 != clusteringKey) {
           val columnNameBytes = keyVal._1.getBytes
           val colBytesLength = columnNameBytes.length
           out.writeInt(colBytesLength)
@@ -58,7 +58,7 @@ class DB(dbPath: String) extends LazyLogging {
     lmdb.dbPath = pKeyPath
     logger.debug(pKeyPath)
 
-    val clusteringKeyValue = data.get(cLUSTERING_KEY).toString
+    val clusteringKeyValue = data.get(clusteringKey).toString
     logger.debug(clusteringKeyValue + ":" + new String(dataBytes))
     lmdb.byteWrite(clusteringKeyValue, dataBytes)
   }
@@ -77,8 +77,8 @@ class DB(dbPath: String) extends LazyLogging {
   }
 
   //get all records from a partition
-  def getAllRecords(tableName: String, columns: List[String],
-                    partitionKeyData: Any): Array[Map[String, Either[String, Int]]] = {
+  def allRecordsByPartition(tableName: String,
+                            partitionKeyData: Any): Array[Map[String, Either[String, Int]]] = {
     val tablePath = dbPath + "/" + tableName
     val lmdbManager = new LMDB(tablePath)
     val partitionKey = lmdbManager.read(PARTITION_KEY) // read partition key from table information
@@ -86,13 +86,42 @@ class DB(dbPath: String) extends LazyLogging {
     lmdbManager.dbPath = tablePath + "/Some(" + partitionKeyData.toString + ")" //traverse to selected partition
     val dataBytesArray = lmdbManager.readAllValues() //read all rows to list of byte array
 
-    val record: Array[Map[String, Either[String, Int]]] =
+    val records: Array[Map[String, Either[String, Int]]] =
       new Array[Map[String, Either[String, Int]]](dataBytesArray.size())
     for (a <- 0 until dataBytesArray.size()) {
       val rec = getData(tablePath, dataBytesArray.get(a))
-      record(a) = rec
+      records(a) = rec
     }
-    record
+    records
+  }
+
+  def allRecords(tableName: String): Array[Map[String, Either[String, Int]]] = {
+    val tablePath = dbPath + "/" + tableName
+    val partitions = partitionList(tablePath)
+    val lmdb = new LMDB(tablePath)
+    var recordCount: Int = 0
+    //read total no. of records
+    partitions.foreach(x => {
+      lmdb.dbPath = tablePath + "/" + x
+      recordCount = recordCount + lmdb.keyCount()
+
+    })
+    //creating array based of total no. of records
+    val resultSet: Array[Map[String, Either[String, Int]]] =
+      new Array[Map[String, Either[String, Int]]](recordCount)
+    //fetching data for each partition and storing in array
+    var index: Int = 0
+
+    partitions.foreach(x => {
+      lmdb.dbPath = tablePath + "/" + x
+      val partitionRecords = lmdb.readAllValues() //read byteArray of records
+      for (i <- 0 until partitionRecords.size()) {
+        val record = getData(tablePath, partitionRecords.get(i)) //convert byteArray to data
+        resultSet(index) = record
+        index = index + 1
+      }
+    })
+    resultSet
   }
 
   //create (column -> value) map from data bytes
@@ -130,5 +159,18 @@ class DB(dbPath: String) extends LazyLogging {
       case e: EOFException => in.close()
     }
     data.toMap
+  }
+
+  def partitionList(tablePath: String): Array[String] = {
+    val fileList = new File(tablePath).list()
+    val partitions: Array[String] = new Array[String](fileList.length - 2)
+    var j = 0
+    for (i <- 0 until fileList.length) {
+      if (fileList(i) != "lock.mdb" && fileList(i) != "data.mdb") {
+        partitions(j) = fileList(i)
+        j = j + 1
+      }
+    }
+    partitions
   }
 }
