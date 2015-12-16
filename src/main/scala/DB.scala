@@ -6,6 +6,8 @@ import java.nio.file.{Path, Files}
 import DataTypes._
 import com.typesafe.scalalogging.LazyLogging
 
+import scala.collection.mutable.ArrayBuffer
+
 class DB(dbPath: String) extends LazyLogging {
 
   val PARTITION_KEY = "pKey"
@@ -37,14 +39,14 @@ class DB(dbPath: String) extends LazyLogging {
     data.foreach(
       keyVal => {
         if (keyVal._1 != pARTITION_KEY && keyVal._1 != cLUSTERING_KEY) {
-          val columnNameBytes = keyVal._1.getBytes()
+          val columnNameBytes = keyVal._1.getBytes
           val colBytesLength = columnNameBytes.length
           out.writeInt(colBytesLength)
           out.write(columnNameBytes)
           keyVal._2 match {
             case _: Int => out.writeInt(keyVal._2.asInstanceOf[Int])
             case _: String => val value = keyVal._2.asInstanceOf[String]
-              val valueBytes = value.getBytes()
+              val valueBytes = value.getBytes
               val valBytesLength = valueBytes.length
               out.writeInt(valBytesLength)
               out.write(valueBytes)
@@ -54,21 +56,49 @@ class DB(dbPath: String) extends LazyLogging {
     )
     val dataBytes = byteOutStream.toByteArray
     lmdb.dbPath = pKeyPath
-    val clusteringKeyValue = data.get(cLUSTERING_KEY).toString
-    lmdb.byteWrite(clusteringKeyValue, dataBytes)
+    logger.debug(pKeyPath)
 
+    val clusteringKeyValue = data.get(cLUSTERING_KEY).toString
+    logger.debug(clusteringKeyValue + ":" + new String(dataBytes))
+    lmdb.byteWrite(clusteringKeyValue, dataBytes)
   }
 
-  def getData(tableName: String, columns: List[String],
-              partitionKeyData: Any, clusteringKeyData: Any): Map[String, Either[String, Int]] = {
+  //get a single record using parttion key and clustering key
+  def getRecord(tableName: String, columns: List[String],
+                partitionKeyData: Any, clusteringKeyData: Any): Map[String, Either[String, Int]] = {
     val tablePath = dbPath + "/" + tableName
     val lmdbManager = new LMDB(tablePath)
     val partitionKey = lmdbManager.read(PARTITION_KEY) // read partition key from table information
 
     lmdbManager.dbPath = tablePath + "/Some(" + partitionKeyData.toString + ")" //traverse to selected partition
-    var data = scala.collection.mutable.Map[String, Either[String, Int]]()
 
     val dataBytes = lmdbManager.byteRead(clusteringKeyData.toString) //load data from clustering key
+    getData(tablePath, dataBytes)
+  }
+
+  //get all records from a partition
+  def getAllRecords(tableName: String, columns: List[String],
+                    partitionKeyData: Any): Array[Map[String, Either[String, Int]]] = {
+    val tablePath = dbPath + "/" + tableName
+    val lmdbManager = new LMDB(tablePath)
+    val partitionKey = lmdbManager.read(PARTITION_KEY) // read partition key from table information
+
+    lmdbManager.dbPath = tablePath + "/Some(" + partitionKeyData.toString + ")" //traverse to selected partition
+    val dataBytesArray = lmdbManager.readAllValues() //read all rows to list of byte array
+
+    val record: Array[Map[String, Either[String, Int]]] =
+      new Array[Map[String, Either[String, Int]]](dataBytesArray.size())
+    for (a <- 0 until dataBytesArray.size()) {
+      val rec = getData(tablePath, dataBytesArray.get(a))
+      record(a) = rec
+    }
+    record
+  }
+
+  //create (column -> value) map from data bytes
+  private def getData(tablePath: String, dataBytes: Array[Byte]): Map[String, Either[String, Int]] = {
+    val lmdbManager: LMDB = new LMDB(tablePath)
+    var data = scala.collection.mutable.Map[String, Either[String, Int]]()
 
     val in: DataInputStream = new DataInputStream(new ByteArrayInputStream(dataBytes))
 
@@ -79,7 +109,7 @@ class DB(dbPath: String) extends LazyLogging {
         val columnSize = in.readInt()
         //read column name and convert to String
 
-        var colByteValue: Array[Byte] = new Array[Byte](columnSize)
+        val colByteValue: Array[Byte] = new Array[Byte](columnSize)
 
         in.read(colByteValue, 0, columnSize)
         val columnName = new String(colByteValue)
@@ -90,7 +120,6 @@ class DB(dbPath: String) extends LazyLogging {
         }
         else {
           val dataSize = in.readInt()
-
           val dataBytesValue: Array[Byte] = new Array[Byte](dataSize)
           in.read(dataBytesValue, 0, dataSize)
           val columnData = new String(dataBytesValue)
@@ -100,12 +129,6 @@ class DB(dbPath: String) extends LazyLogging {
     } catch {
       case e: EOFException => in.close()
     }
-    //return map of column -> values
-
     data.toMap
   }
 }
-
-
-
-
