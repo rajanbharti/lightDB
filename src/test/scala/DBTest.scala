@@ -88,33 +88,33 @@ class DBTest extends FunSuite with BeforeAndAfter {
     val records = db.allRecords("sensor_data")
     records.foreach(x => println(x))
   }
-/*
-  test("update test") {
-    val tableName = "sensor_data"
-    val db = new DB(dbPath)
 
-    val newData = Map("temperature" -> 26, "description" -> "out temperature3")
-    db.update(tableName, newData, 1, 123)
-    assert(db.getRecord(tableName, 1, 123) == newData)
-
-
-    val oldData = Map("temperature" -> 23, "description" -> "out temperature")
-    db.update(tableName, oldData, 1, 123)
-    assert(db.getRecord(tableName, 1, 123) == oldData)
-
-  }
-
-    test("delete test") {
+    test("update test") {
+      val tableName = "sensor_data"
       val db = new DB(dbPath)
-      db.delete("sensor_data", 1, 123)
-      assert(db.allRecords("sensor_data").length==3)
+      println(db.allRecords(tableName).length)
+      val newData = Map("temperature" -> 27, "description" -> "out temperature3")
+      db.update(tableName, newData, partitionKeyData = 1, clusteringKeyData = 123)
+      assert(db.getRecord(tableName, 1, 123) == newData)
 
-      val data = Map("sensorId" -> 1, "temperature" -> 23,
-        "timestamp" -> 123, "description" -> "out temperature")
 
-      db.insert("sensor_data", data)
-      assert(db.allRecords("sensor_data").length==4)
-      }*/
+      val oldData = Map("temperature" -> 23, "description" -> "out temperature")
+      db.update(tableName, oldData, partitionKeyData = 1, clusteringKeyData = 123)
+      assert(db.getRecord(tableName, 1, 123) == oldData)
+
+    }
+
+  test("delete test") {
+    val db = new DB(dbPath)
+    db.delete("sensor_data", 1, 123)
+    assert(db.allRecords("sensor_data").length == 3)
+
+    val data = Map("sensorId" -> 1, "temperature" -> 23,
+      "timestamp" -> 123, "description" -> "out temperature")
+
+    db.insert("sensor_data", data)
+    assert(db.allRecords("sensor_data").length == 4)
+  }
 
 
 }

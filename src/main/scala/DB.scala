@@ -73,9 +73,12 @@ class DB(dbPath: String) extends LazyLogging {
              partitionKeyData: Any, clusteringKeyData: Any) = {
 
     var newMap = getRecord(tableName, partitionKeyData, clusteringKeyData)
+
     data.foreach(x => {
       newMap = newMap + x
     })
+    delete(tableName, partitionKeyData, clusteringKeyData)
+
     val byteOutStream: ByteArrayOutputStream = new ByteArrayOutputStream()
     val out: DataOutputStream = new DataOutputStream(byteOutStream)
     newMap.foreach(keyVal => {
@@ -96,6 +99,7 @@ class DB(dbPath: String) extends LazyLogging {
     val dataBytes = byteOutStream.toByteArray
     val partitionPath = dbPath + "/" + tableName + "/Some(" + partitionKeyData.toString + ")"
     val lmdb = new LMDB(partitionPath)
+    
     lmdb.byteWrite(clusteringKeyData.toString, dataBytes)
 
   }

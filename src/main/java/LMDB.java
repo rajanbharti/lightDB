@@ -209,7 +209,7 @@ public class LMDB {
         db.close();
         env.close();
 
-        return count+1;
+        return count + 1;
     }
 
     public ArrayList<byte[]> readNValues(int valuesCount) {
@@ -305,13 +305,15 @@ public class LMDB {
     public void delete(String key) {
         Env env = new Env(dbPath);
         Database db = env.openDatabase();
-        Transaction tx = env.createReadTransaction();
+        Transaction tx = env.createWriteTransaction();
         BufferCursor cursor = db.bufferCursor(tx);
         // iterate from first item and forwards
         cursor.seek(bytes(key));
         // delete cursor position
         cursor.delete();
+        tx.commit();
         cursor.close();
+
         db.close();
         env.close();
     }
