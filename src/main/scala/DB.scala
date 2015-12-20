@@ -1,15 +1,11 @@
-package tuplejump.lmdb
+package org.tuplejump.lmdb
 
 import java.io._
 import java.nio.file.{Path, Files}
 
-import DataTypes._
-import ch.qos.logback.classic.db.names.TableName
-import com.sun.xml.internal.bind.v2.TODO
+
 import com.typesafe.scalalogging.LazyLogging
 import org.fusesource.lmdbjni.LMDBException
-
-import scala.collection.mutable.ArrayBuffer
 
 class DB(dbPath: String) extends LazyLogging {
 
@@ -35,7 +31,13 @@ class DB(dbPath: String) extends LazyLogging {
     if (!new File(pKeyPath).exists()) {
       new File(pKeyPath).mkdir()
     }
+    val dataBytes: Array[Byte] = mapToBytes(data, partitionKey, clusteringKey)
+    lmdb.dbPath = pKeyPath
+    val clusteringKeyValue = data.get(clusteringKey).toString
+    lmdb.byteWrite(clusteringKeyValue, dataBytes)
+  }
 
+  private def mapToBytes(data: Map[String, Any], partitionKey: String, clusteringKey: String): Array[Byte] = {
     val byteOutStream: ByteArrayOutputStream = new ByteArrayOutputStream()
     val out: DataOutputStream = new DataOutputStream(byteOutStream)
     data.foreach(
@@ -57,9 +59,7 @@ class DB(dbPath: String) extends LazyLogging {
       }
     )
     val dataBytes = byteOutStream.toByteArray
-    lmdb.dbPath = pKeyPath
-    val clusteringKeyValue = data.get(clusteringKey).toString
-    lmdb.byteWrite(clusteringKeyValue, dataBytes)
+    dataBytes
   }
 
   def delete(tableName: String, partitionKeyData: Any, clusteringKeyData: Any) = {
@@ -79,6 +79,14 @@ class DB(dbPath: String) extends LazyLogging {
     })
     delete(tableName, partitionKeyData, clusteringKeyData)
 
+    val dataBytes: Array[Byte] = mapToBytes(newMap)
+    val partitionPath = dbPath + "/" + tableName + "/Some(" + partitionKeyData.toString + ")"
+    val lmdb = new LMDB(partitionPath)
+
+    lmdb.byteWrite(clusteringKeyData.toString, dataBytes)
+  }
+
+  private def mapToBytes(newMap: Map[String, Any]): Array[Byte] = {
     val byteOutStream: ByteArrayOutputStream = new ByteArrayOutputStream()
     val out: DataOutputStream = new DataOutputStream(byteOutStream)
     newMap.foreach(keyVal => {
@@ -95,15 +103,9 @@ class DB(dbPath: String) extends LazyLogging {
           out.write(valueBytes)
       }
     })
-
     val dataBytes = byteOutStream.toByteArray
-    val partitionPath = dbPath + "/" + tableName + "/Some(" + partitionKeyData.toString + ")"
-    val lmdb = new LMDB(partitionPath)
-    
-    lmdb.byteWrite(clusteringKeyData.toString, dataBytes)
-
+    dataBytes
   }
-
 
   //get a single record using partition key and clustering key
   def getRecord(tableName: String,
@@ -126,7 +128,7 @@ class DB(dbPath: String) extends LazyLogging {
     val lmdb = new LMDB(tablePath)
 
     lmdb.dbPath = tablePath + "/Some(" + partitionKeyData.toString + ")" //traverse to selected partition
-    val dataBytesArray = lmdb.readAllValues() //read all rows to list of byte array
+    val dataBytesArray = lmdb.readAllValues //read all rows to list of byte array
 
     val records: Array[Map[String, Any]] =
       new Array[Map[String, Any]](dataBytesArray.size())
@@ -145,7 +147,7 @@ class DB(dbPath: String) extends LazyLogging {
     //read total no. of records
     partitions.foreach(x => {
       lmdb.dbPath = tablePath + "/" + x
-      recordCount = recordCount + lmdb.keyCount()
+      recordCount = recordCount + lmdb.keyCount
     })
     //creating array based of total no. of records
     val resultSet: Array[Map[String, Any]] =
@@ -155,8 +157,8 @@ class DB(dbPath: String) extends LazyLogging {
     try {
       partitions.foreach(x => {
         lmdb.dbPath = tablePath + "/" + x
-        val partitionRecords = lmdb.readAllValues() //read byteArray of records
-        for (i <- 0 until partitionRecords.size()) {
+        val partitionRecords = lmdb.readAllValues //read byteArray of records
+        for (i <- 0 until  partitionRecords.size()) {
           val record = getData(tablePath, partitionRecords.get(i)) //convert byteArray to data
           resultSet(index) = record
           index = index + 1

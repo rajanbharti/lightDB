@@ -4,11 +4,12 @@ import java.io._
 import com.typesafe.config.{ConfigFactory, Config}
 
 import org.scalatest._
-import org.scalatest.BeforeAndAfter
-import tuplejump.lmdb._
+
+import org.tuplejump.lmdb.{DB, DataTypes}
+
 import DataTypes._
 
-class DBTest extends FunSuite with BeforeAndAfter {
+class DBTest extends FunSuite with Matchers {
 
   val conf = ConfigFactory.load()
   lazy val dbPath = conf.getString("dbPath")
@@ -18,8 +19,7 @@ class DBTest extends FunSuite with BeforeAndAfter {
     val columns = Map("sensorId" -> INT.toString, "temperature" -> INT.toString,
       "timestamp" -> INT.toString, "description" -> TEXT.toString)
     db.create("sensor_data", columns, partitionKey = "sensorId", clusteringKey = "timestamp")
-
-    assert(new File(dbPath + "/" + "sensor_data").exists)
+    new File(dbPath + "/" + "sensor_data").exists should be(true)
   }
 
   test("write data") {
@@ -38,17 +38,17 @@ class DBTest extends FunSuite with BeforeAndAfter {
     db.insert("sensor_data", data3)
     db.insert("sensor_data", data4)
 
-    assert(new File(tablePath + "/" + "Some(1)").exists)
-    assert(new File(tablePath + "/" + "Some(2)").exists)
-    assert(new File(tablePath + "/" + "Some(3)").exists)
-    assert(!new File(tablePath + "/" + "Some(4)").exists)
+    new File(tablePath + "/" + "Some(1)").exists should be(true)
+    new File(tablePath + "/" + "Some(2)").exists should be(true)
+    new File(tablePath + "/" + "Some(3)").exists should be(true)
+    new File(tablePath + "/" + "Some(4)").exists should be(false)
   }
 
   test("read data") {
     val db = new DB(dbPath)
     val columns = List("temperature", "description")
-    val readData1 = db.getRecord("sensor_data", 1, Some(125))
 
+    val readData1 = db.getRecord("sensor_data", 1, Some(125))
     assert(readData1.get("temperature").contains(25))
     assert(readData1.get("description").contains("out temperature"))
 
@@ -89,20 +89,18 @@ class DBTest extends FunSuite with BeforeAndAfter {
     records.foreach(x => println(x))
   }
 
-    test("update test") {
-      val tableName = "sensor_data"
-      val db = new DB(dbPath)
-      println(db.allRecords(tableName).length)
-      val newData = Map("temperature" -> 27, "description" -> "out temperature3")
-      db.update(tableName, newData, partitionKeyData = 1, clusteringKeyData = 123)
-      assert(db.getRecord(tableName, 1, 123) == newData)
+  test("update test") {
+    val tableName = "sensor_data"
+    val db = new DB(dbPath)
 
+    val newData = Map("temperature" -> 27, "description" -> "out temperature3")
+    db.update(tableName, newData, partitionKeyData = 1, clusteringKeyData = 123)
+    assert(db.getRecord(tableName, 1, 123) == newData)
 
-      val oldData = Map("temperature" -> 23, "description" -> "out temperature")
-      db.update(tableName, oldData, partitionKeyData = 1, clusteringKeyData = 123)
-      assert(db.getRecord(tableName, 1, 123) == oldData)
-
-    }
+    val oldData = Map("temperature" -> 23, "description" -> "out temperature")
+    db.update(tableName, oldData, partitionKeyData = 1, clusteringKeyData = 123)
+    assert(db.getRecord(tableName, 1, 123) == oldData)
+  }
 
   test("delete test") {
     val db = new DB(dbPath)
