@@ -1,3 +1,5 @@
+package org.tuplejump.lmdb
+
 import java.io._
 import java.util
 

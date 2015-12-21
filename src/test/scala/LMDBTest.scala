@@ -1,8 +1,8 @@
+import org.tuplejump.lmdb._
 import java.io.File
 
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{FunSuite, Matchers, FlatSpec}
-import org.tuplejump.lmdb.LMDB
 
 class LMDBTest extends FunSuite with Matchers {
   val conf = ConfigFactory.load()
@@ -37,6 +37,5 @@ class LMDBTest extends FunSuite with Matchers {
     lmdb.keyCount should be(3)
     lmdb.write("a", "x")
   }
-
 
 }
