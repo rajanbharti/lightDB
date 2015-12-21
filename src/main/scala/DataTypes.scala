@@ -1,4 +1,4 @@
-package org.tuplejump.lmdb
+
 
 object DataTypes extends Enumeration {
   type DataTypes = Value

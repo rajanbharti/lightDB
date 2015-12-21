@@ -5,8 +5,7 @@ import com.typesafe.config.{ConfigFactory, Config}
 
 import org.scalatest._
 
-import org.tuplejump.lmdb.{DB, DataTypes}
-
+import org.tuplejump.lmdb._
 import DataTypes._
 
 class DBTest extends FunSuite with Matchers {
@@ -63,6 +62,20 @@ class DBTest extends FunSuite with Matchers {
     val readData4 = db.getRecord("sensor_data", 3, Some(122))
     assert(readData4.get("temperature").contains(24))
     assert(readData4.get("description").contains("out temperature2"))
+  }
+
+  test("selected columns") {
+    val db = new DB(dbPath)
+    val columns = List("temperature")
+
+    val readData1 = db.getRecordByColumns("sensor_data", 1, Some(125), columns)
+
+    readData1.size should be(1)
+    readData1.contains("temperature") should be(true)
+    readData1.get("temperature") should be(Some(25))
+
+    val dataByPartition = db.getMultiRecordsByColumns("sensor_data", 1, columns)
+    dataByPartition.foreach(x => x.size should be(1))
   }
 
   test("multi record fetch") {

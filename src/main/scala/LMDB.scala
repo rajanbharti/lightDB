@@ -1,10 +1,8 @@
-package org.tuplejump.lmdb
-
 import java.io._
 import java.util
 
-import org.fusesource.lmdbjni._
 import org.fusesource.lmdbjni.Constants._
+import org.fusesource.lmdbjni._
 
 object LMDB {
   @throws(classOf[IOException])
@@ -27,8 +25,8 @@ object LMDB {
 class LMDB {
   private[lmdb] var dbPath: String = null
 
-  val env: Env = new Env(dbPath)
-  val db: Database = env.openDatabase
+//  val env: Env = new Env(dbPath)
+ // val db: Database = env.openDatabase
 
   def this(dbPath: String) {
     this()
@@ -36,7 +34,8 @@ class LMDB {
   }
 
   def write(key: String, value: String) {
-
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
     val tx: Transaction = env.createWriteTransaction
     val cursor: BufferCursor = db.bufferCursor(tx)
     cursor.first
@@ -50,7 +49,8 @@ class LMDB {
   }
 
   def write(key: Int, value: String) {
-
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
     val tx: Transaction = env.createWriteTransaction
     val cursor: BufferCursor = db.bufferCursor(tx)
     cursor.first
@@ -65,7 +65,8 @@ class LMDB {
 
   def read(key: String): String = {
 
-
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
     val tx: Transaction = env.createReadTransaction
     val cursor: BufferCursor = db.bufferCursor(tx)
     cursor.first
@@ -77,6 +78,8 @@ class LMDB {
   }
 
   def byteWrite(key: String, value: Array[Byte]) {
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
 
     val tx: Transaction = env.createWriteTransaction
     val cursor: BufferCursor = db.bufferCursor(tx)
@@ -92,7 +95,8 @@ class LMDB {
 
   def byteRead(key: String): Array[Byte] = {
     var value: Array[Byte] = null
-
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
     val tx: Transaction = env.createReadTransaction
     val cursor: BufferCursor = db.bufferCursor(tx)
     cursor.first
@@ -119,10 +123,10 @@ class LMDB {
   }
 
 
-
   def keyCount: Int = {
     var count: Int = 0
-
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
     val tx: Transaction = env.createReadTransaction()
     val cursor: BufferCursor = db.bufferCursor(tx)
     cursor.first
@@ -138,7 +142,8 @@ class LMDB {
   }
 
   def readNValues(valuesCount: Int): util.ArrayList[Array[Byte]] = {
-
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
     val tx: Transaction = env.createReadTransaction()
     val cursor: BufferCursor = db.bufferCursor(tx)
     val records: util.ArrayList[Array[Byte]] = new util.ArrayList[Array[Byte]](valuesCount)
@@ -158,7 +163,8 @@ class LMDB {
   }
 
   def readAllValues: util.ArrayList[Array[Byte]] = {
-
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
     val tx: Transaction = env.createWriteTransaction
     val cursor: BufferCursor = db.bufferCursor(tx)
     val records: util.ArrayList[Array[Byte]] = new util.ArrayList[Array[Byte]](keyCount + 1)
@@ -181,7 +187,8 @@ class LMDB {
   }
 
   def forwardTraverse {
-
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
     val tx: Transaction = env.createWriteTransaction
     val cursor: BufferCursor = db.bufferCursor(tx)
     val objects: Array[AnyRef] = new Array[AnyRef](keyCount)
@@ -191,18 +198,17 @@ class LMDB {
       System.out.println(cursor.valUtf8(0).getString.toString)
     }
     cursor.close
-
-
   }
 
   def delete(key: String) {
-
+    val env: Env = new Env(dbPath)
+    val db: Database = env.openDatabase
     val tx: Transaction = env.createWriteTransaction
     val cursor: BufferCursor = db.bufferCursor(tx)
     cursor.seek(bytes(key))
     cursor.delete
     tx.commit
     cursor.close
-  
+
   }
 }
