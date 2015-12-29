@@ -15,37 +15,35 @@ class DBTest extends FunSuite with Matchers {
 
   test("create table") {
     val db = new DB(dbPath)
-    val columns = Map("sensorId" -> INT.toString, "temperature" -> INT.toString,
-      "timestamp" -> INT.toString, "description" -> TEXT.toString)
-    db.create("sensor_data", columns, partitionKey = "sensorId", clusteringKey = "timestamp")
-    new File(dbPath + "/" + "sensor_data").exists should be(true)
+    val columns = Array("sensorId", "temperature", "timestamp", "description")
+    val dataTypes = Array(INT, INT, INT, TEXT)
+    db.create("sensor_data", columns, dataTypes, partitionKey = "sensorId", clusteringKey = "timestamp")
+
+    assert(new File(dbPath + "/" + "sensor_data").exists)
   }
 
   test("write data") {
-    val data = Map("sensorId" -> 1, "temperature" -> 23,
-      "timestamp" -> 123, "description" -> "out temperature")
-    val data2 = Map("sensorId" -> 1, "temperature" -> 25,
-      "timestamp" -> 125, "description" -> "out temperature")
-    val data3 = Map("sensorId" -> 2, "temperature" -> 23,
-      "timestamp" -> 124, "description" -> "inside temperature")
-    val data4 = Map("sensorId" -> 3, "temperature" -> 24,
-      "timestamp" -> 122, "description" -> "out temperature2")
+    val columns = Array("sensorId", "temperature", "timestamp", "description")
+    val data1 = Array(1, 23, 123, "out temperature")
+
+    val data2 = Array(1, 25, 125, "out temperature")
+    val data3 = Array(2, 23, 124, "inside temperature")
+    val data4 = Array(3, 24, 122, "out temperature2")
     val tablePath = dbPath + "/" + "sensor_data"
     val db = new DB(dbPath)
-    db.insert("sensor_data", data)
-    db.insert("sensor_data", data2)
-    db.insert("sensor_data", data3)
-    db.insert("sensor_data", data4)
+    db.insert("sensor_data", columns, data1)
+    db.insert("sensor_data", columns, data2)
+    db.insert("sensor_data", columns, data3)
+    db.insert("sensor_data", columns, data4)
 
-    new File(tablePath + "/" + "Some(1)").exists should be(true)
-    new File(tablePath + "/" + "Some(2)").exists should be(true)
-    new File(tablePath + "/" + "Some(3)").exists should be(true)
-    new File(tablePath + "/" + "Some(4)").exists should be(false)
+    assert(new File(tablePath + "/" + "Some(1)").exists)
+    assert(new File(tablePath + "/" + "Some(2)").exists)
+    assert(new File(tablePath + "/" + "Some(3)").exists)
+    assert(!new File(tablePath + "/" + "Some(4)").exists)
   }
 
   test("read data") {
     val db = new DB(dbPath)
-    val columns = List("temperature", "description")
 
     val readData1 = db.getRecord("sensor_data", 1, Some(125))
     assert(readData1.get("temperature").contains(25))
@@ -74,7 +72,7 @@ class DBTest extends FunSuite with Matchers {
     readData1.contains("temperature") should be(true)
     readData1.get("temperature") should be(Some(25))
 
-    val dataByPartition = db.getMultiRecordsByColumns("sensor_data", 1, columns)
+    val dataByPartition = db.getPartitionRecordsByColumns("sensor_data", 1, columns)
     dataByPartition.foreach(x => x.size should be(1))
   }
 
@@ -119,11 +117,10 @@ class DBTest extends FunSuite with Matchers {
     val db = new DB(dbPath)
     db.delete("sensor_data", 1, 123)
     assert(db.allRecords("sensor_data").length == 3)
+    val columns = Array("sensorId", "temperature", "timestamp", "description")
+    val data = Array(1, 23, 123, "out temperature")
 
-    val data = Map("sensorId" -> 1, "temperature" -> 23,
-      "timestamp" -> 123, "description" -> "out temperature")
-
-    db.insert("sensor_data", data)
+    db.insert("sensor_data", columns, data)
     assert(db.allRecords("sensor_data").length == 4)
   }
 

@@ -3,8 +3,11 @@ package org.tuplejump.lmdb
 import java.io._
 import java.util
 
+import com.typesafe.scalalogging.LazyLogging
 import org.fusesource.lmdbjni.Constants._
 import org.fusesource.lmdbjni._
+
+import scala.collection.mutable
 
 object LMDB {
   @throws(classOf[IOException])
@@ -12,7 +15,7 @@ object LMDB {
     val out: ByteArrayOutputStream = new ByteArrayOutputStream
     val os: ObjectOutputStream = new ObjectOutputStream(out)
     os.writeObject(`object`)
-    return out.toByteArray
+    out.toByteArray
   }
 
   @throws(classOf[IOException])
@@ -20,15 +23,15 @@ object LMDB {
   private def deserialize(data: Array[Byte]): AnyRef = {
     val in: ByteArrayInputStream = new ByteArrayInputStream(data)
     val is: ObjectInputStream = new ObjectInputStream(in)
-    return is.readObject
+    is.readObject
   }
 }
 
-class LMDB {
+class LMDB extends LazyLogging {
   private[lmdb] var dbPath: String = null
 
-//  val env: Env = new Env(dbPath)
- // val db: Database = env.openDatabase
+  //  val env: Env = new Env(dbPath)
+  // val db: Database = env.openDatabase
 
   def this(dbPath: String) {
     this()
@@ -59,10 +62,9 @@ class LMDB {
     cursor.keyWriteInt(key)
     cursor.valWriteUtf8(value)
     cursor.overwrite
-    cursor.close
-    tx.commit
-    db.close
-
+    cursor.close()
+    tx.commit()
+    db.close()
   }
 
   def read(key: String): String = {
@@ -108,7 +110,7 @@ class LMDB {
     cursor.close
     db.close
     env.close
-    return value
+    value
   }
 
   @throws(classOf[IOException])
@@ -121,7 +123,7 @@ class LMDB {
   @throws(classOf[ClassNotFoundException])
   def readObject(key: String): AnyRef = {
     val objectBytes: Array[Byte] = byteRead(key)
-    return LMDB.deserialize(objectBytes)
+    LMDB.deserialize(objectBytes)
   }
 
 
@@ -167,7 +169,7 @@ class LMDB {
   def readAllValues: util.ArrayList[Array[Byte]] = {
     val env: Env = new Env(dbPath)
     val db: Database = env.openDatabase
-    val tx: Transaction = env.createWriteTransaction
+    val tx: Transaction = env.createReadTransaction()
     val cursor: BufferCursor = db.bufferCursor(tx)
     val records: util.ArrayList[Array[Byte]] = new util.ArrayList[Array[Byte]](keyCount + 1)
     cursor.first
@@ -185,21 +187,25 @@ class LMDB {
     cursor.close
     // db.close
     //   env.close
-    return records
+    records
   }
 
-  def forwardTraverse {
+  def allKeyValues: Map[String, Array[Byte]] = {
     val env: Env = new Env(dbPath)
     val db: Database = env.openDatabase
-    val tx: Transaction = env.createWriteTransaction
+    val tx: Transaction = env.createReadTransaction()
     val cursor: BufferCursor = db.bufferCursor(tx)
-    val objects: Array[AnyRef] = new Array[AnyRef](keyCount)
+    var data = scala.collection.mutable.Map[String, Array[Byte]]()
     cursor.first
-    while (cursor.next) {
+    var i: Int = 0
+    cursor.keyUtf8(0)
+    data += (cursor.keyUtf8(0).getString -> cursor.valBytes())
+    while (cursor.next && i < keyCount - 1) {
       cursor.keyUtf8(0)
-      System.out.println(cursor.valUtf8(0).getString.toString)
+      data += (cursor.keyUtf8(0).getString -> cursor.valBytes())
+      i += 1
     }
-    cursor.close
+    data.toMap
   }
 
   def delete(key: String) {
