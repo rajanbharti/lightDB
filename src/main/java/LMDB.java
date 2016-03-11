@@ -103,7 +103,6 @@ public class LMDB {
 
     }
 
-
     public byte[] byteRead(String key) {
         byte[] value;
         Env env = new Env(dbPath);
@@ -234,7 +233,6 @@ public class LMDB {
         db.close();
         env.close();
         return records;
-
     }
 
     public ArrayList<byte[]> readAllValues() {
@@ -313,7 +311,6 @@ public class LMDB {
         cursor.delete();
         tx.commit();
         cursor.close();
-
         db.close();
         env.close();
     }

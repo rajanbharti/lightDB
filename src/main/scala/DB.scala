@@ -1,67 +1,100 @@
-package tuplejump.lmdb
+package org.tuplejump.lmdb
 
 import java.io._
-import java.nio.file.{Path, Files}
 
-import DataTypes._
-import ch.qos.logback.classic.db.names.TableName
-import com.sun.xml.internal.bind.v2.TODO
 import com.typesafe.scalalogging.LazyLogging
 import org.fusesource.lmdbjni.LMDBException
-
-import scala.collection.mutable.ArrayBuffer
+import org.tuplejump.lmdb.DataTypes.DataTypes
 
 class DB(dbPath: String) extends LazyLogging {
 
   val PARTITION_KEY = "pKey"
   val CLUSTERING_KEY = "cKey"
 
-  def create(tableName: String, columns: Map[String, String], partitionKey: String, clusteringKey: String): Unit = {
+  @throws(classOf[LMDBException])
+  def create(tableName: String, columns: Array[String], dataTypes: Array[DataTypes], partitionKey: String, clusteringKey: String): Unit = {
     val tablePath = dbPath + "/" + tableName
     new File(tablePath).mkdir
     val lmdbManager = new LMDB(tablePath)
-    columns.foreach(keyVal => lmdbManager.write(keyVal._1, keyVal._2.toString))
+
+    if (columns.length == dataTypes.length) {
+      for (i <- columns.indices) {
+        lmdbManager.write(columns(i), dataTypes(i).toString)
+      }
+    }
+
     lmdbManager.write(PARTITION_KEY, partitionKey)
     lmdbManager.write(CLUSTERING_KEY, clusteringKey)
   }
 
-  def insert(tableName: String, data: Map[String, Any]) = {
+  @throws(classOf[LMDBException])
+  def insert(tableName: String, columns: Array[String], data: Array[Any]) = {
     val tablePath = dbPath + "/" + tableName
     val lmdb = new LMDB(tablePath)
     val partitionKey = lmdb.read(PARTITION_KEY)
     val clusteringKey = lmdb.read(CLUSTERING_KEY)
-
-    val pKeyPath = tablePath + "/" + data.get(partitionKey)
+    val partitionKeyLoc = columns.indexWhere(_ == partitionKey)
+    val clusteringKeyLoc = columns.indexWhere(_ == clusteringKey)
+    val pKeyPath = tablePath + "/" + data(partitionKeyLoc)
     if (!new File(pKeyPath).exists()) {
       new File(pKeyPath).mkdir()
     }
-
-    val byteOutStream: ByteArrayOutputStream = new ByteArrayOutputStream()
-    val out: DataOutputStream = new DataOutputStream(byteOutStream)
-    data.foreach(
-      keyVal => {
-        if (keyVal._1 != partitionKey && keyVal._1 != clusteringKey) {
-          val columnNameBytes = keyVal._1.getBytes
-          val colBytesLength = columnNameBytes.length
-          out.writeInt(colBytesLength)
-          out.write(columnNameBytes)
-          keyVal._2 match {
-            case _: Int => out.writeInt(keyVal._2.asInstanceOf[Int])
-            case _: String => val value = keyVal._2.asInstanceOf[String]
-              val valueBytes = value.getBytes
-              val valBytesLength = valueBytes.length
-              out.writeInt(valBytesLength)
-              out.write(valueBytes)
-          }
-        }
-      }
-    )
-    val dataBytes = byteOutStream.toByteArray
+    val dataBytes: Array[Byte] = dataToBytes(columns, data, partitionKey, clusteringKey)
     lmdb.dbPath = pKeyPath
-    val clusteringKeyValue = data.get(clusteringKey).toString
+    val clusteringKeyValue = data(clusteringKeyLoc).toString
     lmdb.byteWrite(clusteringKeyValue, dataBytes)
   }
 
+  private def dataToBytes(columns: Array[String], data: Array[Any], partitionKey: String,
+                          clusteringKey: String): Array[Byte] = {
+    val byteOutStream: ByteArrayOutputStream = new ByteArrayOutputStream()
+    val out: DataOutputStream = new DataOutputStream(byteOutStream)
+    for (i <- columns.indices) {
+      if (columns(i) != partitionKey && columns(i) != clusteringKey) {
+        val columnNameBytes = columns(i).getBytes
+        val colBytesLength = columnNameBytes.length
+        out.writeInt(colBytesLength)
+        out.write(columnNameBytes)
+        data(i) match {
+          case _: Int => out.writeInt(data(i).asInstanceOf[Int])
+          case _: String => val value = data(i).asInstanceOf[String]
+            val valueBytes = value.getBytes
+            val valBytesLength = valueBytes.length
+            out.writeInt(valBytesLength)
+            out.write(valueBytes)
+        }
+      }
+    }
+    val dataBytes = byteOutStream.toByteArray
+    dataBytes
+  }
+
+  private def selectColumns(columns: List[String], resultSet: Map[String, Any]): Map[String, Any] = {
+    val allColumns = scala.collection.mutable.Map(resultSet.toSeq: _*)
+    val rejectedColumns = allColumns -- columns
+    val selectedColumns = allColumns -- rejectedColumns.keySet
+    selectedColumns.toMap
+  }
+
+  def getRecordByColumns(tableName: String, partitionKeyData: Any, clusteringKeyData: Any,
+                         columns: List[String]): Map[String, Any] = {
+    val resultSet = getRecord(tableName, partitionKeyData, clusteringKeyData)
+    selectColumns(columns, resultSet)
+  }
+
+  def getPartitionRecordsByColumns(tableName: String, partitionKeyData: Any,
+                                   columns: List[String]): Array[Map[String, Any]] = {
+    val resultSet = allRecordsByPartition(tableName, partitionKeyData)
+    val records: Array[Map[String, Any]] = new Array[Map[String, Any]](resultSet.length)
+    var index = 0
+    resultSet.foreach(record => {
+      records(index) = selectColumns(columns, record)
+      index = index + 1
+    })
+    records
+  }
+
+  @throws(classOf[LMDBException])
   def delete(tableName: String, partitionKeyData: Any, clusteringKeyData: Any) = {
     val tablePath = dbPath + "/" + tableName
     val pKeyPath = tablePath + "/Some(" + partitionKeyData.toString + ")"
@@ -69,16 +102,24 @@ class DB(dbPath: String) extends LazyLogging {
     lmdb.delete(clusteringKeyData.toString)
   }
 
+  @throws(classOf[LMDBException])
   def update(tableName: String, data: Map[String, Any],
              partitionKeyData: Any, clusteringKeyData: Any) = {
-
     var newMap = getRecord(tableName, partitionKeyData, clusteringKeyData)
-
     data.foreach(x => {
       newMap = newMap + x
     })
     delete(tableName, partitionKeyData, clusteringKeyData)
+    val dataBytes: Array[Byte] = mapToBytes(newMap)
+    val partitionPath = partitionKeyData match {
+      case _: Int => dbPath + "/" + tableName + "/Some(" + partitionKeyData.toString + ")"
+      case _: String => dbPath + "/" + tableName + "/" + partitionKeyData.toString
+    }
+    val lmdb = new LMDB(partitionPath)
+    lmdb.byteWrite(clusteringKeyData.toString, dataBytes)
+  }
 
+  private def mapToBytes(newMap: Map[String, Any]): Array[Byte] = {
     val byteOutStream: ByteArrayOutputStream = new ByteArrayOutputStream()
     val out: DataOutputStream = new DataOutputStream(byteOutStream)
     newMap.foreach(keyVal => {
@@ -95,22 +136,16 @@ class DB(dbPath: String) extends LazyLogging {
           out.write(valueBytes)
       }
     })
-
     val dataBytes = byteOutStream.toByteArray
-    val partitionPath = dbPath + "/" + tableName + "/Some(" + partitionKeyData.toString + ")"
-    val lmdb = new LMDB(partitionPath)
-    
-    lmdb.byteWrite(clusteringKeyData.toString, dataBytes)
-
+    dataBytes
   }
 
-
   //get a single record using partition key and clustering key
+  @throws(classOf[LMDBException])
   def getRecord(tableName: String,
                 partitionKeyData: Any, clusteringKeyData: Any): Map[String, Any] = {
     val tablePath = dbPath + "/" + tableName
     val lmdbManager = new LMDB(tablePath)
-    val partitionKey = lmdbManager.read(PARTITION_KEY) // read partition key from table information
 
     lmdbManager.dbPath = tablePath + "/Some(" + partitionKeyData.toString + ")" //traverse to selected partition
 
@@ -119,6 +154,7 @@ class DB(dbPath: String) extends LazyLogging {
   }
 
   //get all records from a partition
+  @throws(classOf[LMDBException])
   def allRecordsByPartition(tableName: String,
                             partitionKeyData: Any): Array[Map[String, Any]] = {
     val tablePath = dbPath + "/" + tableName
@@ -126,7 +162,7 @@ class DB(dbPath: String) extends LazyLogging {
     val lmdb = new LMDB(tablePath)
 
     lmdb.dbPath = tablePath + "/Some(" + partitionKeyData.toString + ")" //traverse to selected partition
-    val dataBytesArray = lmdb.readAllValues() //read all rows to list of byte array
+    val dataBytesArray = lmdb.readAllValues //read all rows to list of byte array
 
     val records: Array[Map[String, Any]] =
       new Array[Map[String, Any]](dataBytesArray.size())
@@ -137,6 +173,7 @@ class DB(dbPath: String) extends LazyLogging {
     records
   }
 
+  @throws(classOf[LMDBException])
   def allRecords(tableName: String): Array[Map[String, Any]] = {
     val tablePath = dbPath + "/" + tableName
     val partitions = partitionList(tablePath)
@@ -145,35 +182,32 @@ class DB(dbPath: String) extends LazyLogging {
     //read total no. of records
     partitions.foreach(x => {
       lmdb.dbPath = tablePath + "/" + x
-      recordCount = recordCount + lmdb.keyCount()
+      recordCount = recordCount + lmdb.keyCount
     })
     //creating array based of total no. of records
     val resultSet: Array[Map[String, Any]] =
       new Array[Map[String, Any]](recordCount)
     //fetching data for each partition and storing in array
     var index: Int = 0
-    try {
-      partitions.foreach(x => {
-        lmdb.dbPath = tablePath + "/" + x
-        val partitionRecords = lmdb.readAllValues() //read byteArray of records
-        for (i <- 0 until partitionRecords.size()) {
-          val record = getData(tablePath, partitionRecords.get(i)) //convert byteArray to data
-          resultSet(index) = record
-          index = index + 1
-        }
-      })
-    }
-    catch {
-      case e: LMDBException => println("Invalid query/Data not present")
-    }
+
+    partitions.foreach(x => {
+      lmdb.dbPath = tablePath + "/" + x
+      val partitionRecords = lmdb.readAllValues //read byteArray of records
+      for (i <- 0 until partitionRecords.size()) {
+        val record = getData(tablePath, partitionRecords.get(i)) //convert byteArray to data
+        resultSet(index) = record
+        index = index + 1
+      }
+    })
+
     resultSet
   }
 
   //create (column -> value) map from data bytes
+  @throws(classOf[EOFException])
   private def getData(tablePath: String, dataBytes: Array[Byte]): Map[String, Any] = {
     val lmdb: LMDB = new LMDB(tablePath)
     var data = scala.collection.mutable.Map[String, Any]()
-
     val in: DataInputStream = new DataInputStream(new ByteArrayInputStream(dataBytes))
 
     lmdb.dbPath = tablePath //move to table information
@@ -200,8 +234,9 @@ class DB(dbPath: String) extends LazyLogging {
           data += (columnName -> columnData)
         }
       }
-    } catch {
-      case e: EOFException => in.close()
+    }
+    finally {
+      in.close()
     }
     data.toMap
   }
